@@ -43,12 +43,20 @@ export default function AudioListWithPlayback() {
 
   useEffect(() => {
     const onAppStateChange = async (next: AppStateStatus) => {
-      if (appState.current.match(/inactive|background/) && next === 'active') {
-        if (isPaused) {
-          await audioRecorderPlayer.resumeRecorder();
-          setIsPaused(false);
+      console.log("appState.current", appState, next);
+      if (appState.current === 'active' && next.match(/inactive|background/)) {
+        if ((recording && !paused) || !recording) {
+          await audioRecorderPlayer.pauseRecorder();
+          setIsPaused(true);
+          setPaused(true);
         }
-      }
+      } else
+        if (appState.current.match(/inactive|background/) && next === 'active') {
+          if (isPaused) {
+            await audioRecorderPlayer.resumeRecorder();
+            setIsPaused(false);
+          }
+        }
       appState.current = next;
     };
     const subscription = AppState.addEventListener('change', onAppStateChange);
@@ -193,7 +201,7 @@ export default function AudioListWithPlayback() {
               />
             </TouchableOpacity>
           )}
-          contentContainerStyle={{ paddingBottom: 60, flex: 1 }}
+          contentContainerStyle={{ paddingBottom: 60 }}
           ListEmptyComponent={() => (
             <View style={{ flex: 1, justifyContent: 'center', alignItems: 'center' }}>
               <Text style={{ textAlign: 'center', color: '#666' }}>No recordings yet.</Text>
