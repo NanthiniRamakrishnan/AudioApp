@@ -10,12 +10,9 @@ import {
   AppState,
   StatusBar,
   StyleSheet, AppStateStatus,
-  NativeEventEmitter,
-  NativeModules
 } from 'react-native';
 import MaterialIcons from 'react-native-vector-icons/MaterialIcons';
 import AudioRecorderPlayer from 'react-native-nitro-sound';
-
 
 const audioRecorderPlayer = AudioRecorderPlayer;
 
@@ -25,10 +22,7 @@ export default function AudioListWithPlayback() {
   const [audioList, setAudioList] = useState<string[]>([]);
   const [playingURI, setPlayingURI] = useState<string | null | undefined>(null);
   const [isPaused, setIsPaused] = useState(false);
-
   const appState = useRef<AppStateStatus>(AppState.currentState);
-  const { NitroSoundModule } = NativeModules;
-  const nitroEmitter = new NativeEventEmitter(NitroSoundModule);
 
   async function requestAndroidPermission() {
     if (Platform.OS !== 'android') return true;
@@ -47,13 +41,9 @@ export default function AudioListWithPlayback() {
     }
   }
 
-
   useEffect(() => {
     const onAppStateChange = async (next: AppStateStatus) => {
-      if (appState.current === 'active' && next.match(/inactive|background/)) {
-        await audioRecorderPlayer.pauseRecorder();
-        setIsPaused(true);
-      } else if (appState.current.match(/inactive|background/) && next === 'active') {
+      if (appState.current.match(/inactive|background/) && next === 'active') {
         if (isPaused) {
           await audioRecorderPlayer.resumeRecorder();
           setIsPaused(false);
@@ -61,7 +51,6 @@ export default function AudioListWithPlayback() {
       }
       appState.current = next;
     };
-
     const subscription = AppState.addEventListener('change', onAppStateChange);
     return () => subscription.remove();
   }, [isPaused]);
@@ -76,7 +65,6 @@ export default function AudioListWithPlayback() {
       await audioRecorderPlayer.startRecorder();
       setRecording(true);
       setPaused(false);
-      console.log('Recording started');
     } catch (error) {
       console.error('Start recording error:', error);
     }
@@ -86,7 +74,6 @@ export default function AudioListWithPlayback() {
     try {
       await audioRecorderPlayer.pauseRecorder();
       setPaused(true);
-      console.log('Recording paused');
     } catch (error) {
       console.error('Pause recording error:', error);
     }
@@ -96,7 +83,6 @@ export default function AudioListWithPlayback() {
     try {
       await audioRecorderPlayer.resumeRecorder();
       setPaused(false);
-      console.log('Recording resumed');
     } catch (error) {
       console.error('Resume recording error:', error);
     }
@@ -109,7 +95,6 @@ export default function AudioListWithPlayback() {
       setPaused(false);
       if (uri) {
         setAudioList((prev) => [...prev, uri]);
-        console.log('Recording stopped. File saved:', uri);
       }
     } catch (error) {
       console.error('Stop recording error:', error);
@@ -118,12 +103,10 @@ export default function AudioListWithPlayback() {
 
   const playAudio = async (uri: string | undefined) => {
     try {
-      console.log("uuuuuuuuuuuuu", uri)
       if (playingURI === uri) {
         await audioRecorderPlayer.stopPlayer();
         audioRecorderPlayer.removePlayBackListener();
         setPlayingURI(null);
-        console.log('Playback stopped');
         return;
       }
       if (playingURI) {
@@ -131,7 +114,6 @@ export default function AudioListWithPlayback() {
         audioRecorderPlayer.removePlayBackListener();
       }
       await audioRecorderPlayer.startPlayer(uri);
-
       await audioRecorderPlayer.setVolume(1.0);
       setPlayingURI(uri);
       audioRecorderPlayer.addPlayBackListener((e) => {
@@ -157,7 +139,6 @@ export default function AudioListWithPlayback() {
         <Text style={styles.statusText}>
           Recording status: {recording ? (paused ? 'Paused' : 'Recording') : 'Idle'}
         </Text>
-
         <View style={styles.controlsContainer}>
           {!recording && (
             <TouchableOpacity style={styles.button} onPress={onStartRecord}>
@@ -171,7 +152,6 @@ export default function AudioListWithPlayback() {
                 <MaterialIcons name="pause" size={28} color="white" />
                 <Text style={styles.buttonLabel}>Pause</Text>
               </TouchableOpacity>
-
               <TouchableOpacity style={styles.button} onPress={onStopRecord}>
                 <MaterialIcons name="stop" size={28} color="white" />
                 <Text style={styles.buttonLabel}>Stop</Text>
@@ -184,7 +164,6 @@ export default function AudioListWithPlayback() {
                 <MaterialIcons name="play-arrow" size={28} color="white" />
                 <Text style={styles.buttonLabel}>Resume</Text>
               </TouchableOpacity>
-
               <TouchableOpacity style={styles.button} onPress={onStopRecord}>
                 <MaterialIcons name="stop" size={28} color="white" />
                 <Text style={styles.buttonLabel}>Stop</Text>
@@ -192,34 +171,35 @@ export default function AudioListWithPlayback() {
             </>
           )}
         </View>
-
         <Text style={styles.sectionTitle}>Recorded Audios:</Text>
-        {audioList.length === 0 ? (
-          <Text style={{ textAlign: 'center', color: '#666' }}>No recordings yet.</Text>
-        ) : (
-          <FlatList
-            data={audioList}
-            keyExtractor={(item, index) => index.toString()}
-            renderItem={({ item }) => (
-              <TouchableOpacity style={styles.card} onPress={() => playAudio(item)}>
-                <MaterialIcons
-                  name={item === playingURI ? 'volume-up' : 'audiotrack'}
-                  size={24}
-                  color={item === playingURI ? '#4caf50' : '#333'}
-                />
-                <Text style={[styles.cardText, item === playingURI && { color: '#4caf50' }]}>
-                  {item?.split('/').pop() || 'Unknown File'}
-                </Text>
-                <MaterialIcons
-                  name={item === playingURI ? 'pause-circle-filled' : 'play-circle-fill'}
-                  size={28}
-                  color={item === playingURI ? '#4caf50' : '#333'}
-                />
-              </TouchableOpacity>
-            )}
-            contentContainerStyle={{ paddingBottom: 60 }}
-          />
-        )}
+
+        <FlatList
+          data={audioList}
+          keyExtractor={(item, index) => index.toString()}
+          renderItem={({ item }) => (
+            <TouchableOpacity style={styles.card} onPress={() => playAudio(item)}>
+              <MaterialIcons
+                name={item === playingURI ? 'volume-up' : 'audiotrack'}
+                size={24}
+                color={item === playingURI ? '#4caf50' : '#333'}
+              />
+              <Text style={[styles.cardText, item === playingURI && { color: '#4caf50' }]}>
+                {item?.split('/').pop() || 'Unknown File'}
+              </Text>
+              <MaterialIcons
+                name={item === playingURI ? 'pause-circle-filled' : 'play-circle-fill'}
+                size={28}
+                color={item === playingURI ? '#4caf50' : '#333'}
+              />
+            </TouchableOpacity>
+          )}
+          contentContainerStyle={{ paddingBottom: 60, flex: 1 }}
+          ListEmptyComponent={() => (
+            <View style={{ flex: 1, justifyContent: 'center', alignItems: 'center' }}>
+              <Text style={{ textAlign: 'center', color: '#666' }}>No recordings yet.</Text>
+            </View>
+          )}
+        />
       </View>
     </View>
   );
