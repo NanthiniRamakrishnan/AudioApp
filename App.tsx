@@ -9,205 +9,224 @@ import {
   PermissionsAndroid,
   AppState,
   StatusBar,
-  StyleSheet, AppStateStatus,
+  StyleSheet,
+  AppStateStatus,
 } from 'react-native';
 import MaterialIcons from 'react-native-vector-icons/MaterialIcons';
 import AudioRecorderPlayer from 'react-native-nitro-sound';
+import Ionicons from 'react-native-vector-icons/Ionicons';
 
-const audioRecorderPlayer = AudioRecorderPlayer;
+const recorderInstance = AudioRecorderPlayer;
 
-export default function AudioListWithPlayback() {
-  const [recording, setRecording] = useState(false);
-  const [paused, setPaused] = useState(false);
-  const [audioList, setAudioList] = useState<string[]>([]);
-  const [playingURI, setPlayingURI] = useState<string | null | undefined>(null);
-  const [isPaused, setIsPaused] = useState(false);
-  const appState = useRef<AppStateStatus>(AppState.currentState);
+export default function VoiceRecorderApp() {
+  const [isRecording, setIsRecording] = useState(false);
+  const [isPausedRec, setIsPausedRec] = useState(false);
+  const [savedAudios, setSavedAudios] = useState<string[]>([]);
+  const [currentPlaying, setCurrentPlaying] = useState<string | null | undefined>(null);
+  const [wasPaused, setWasPaused] = useState(false);
+  const appStatus = useRef<AppStateStatus>(AppState.currentState);
 
-  async function requestAndroidPermission() {
+  // ✅ Ask permission
+  async function askMicPermission() {
     if (Platform.OS !== 'android') return true;
     try {
-      const granted = await PermissionsAndroid.request(
+      const result = await PermissionsAndroid.request(
         PermissionsAndroid.PERMISSIONS.RECORD_AUDIO,
         {
           title: 'Microphone Permission',
-          message: 'App needs access to your microphone to record audio',
-          buttonPositive: 'OK'
+          message: 'This app requires microphone access to record audio',
+          buttonPositive: 'Allow',
         }
       );
-      return granted === PermissionsAndroid.RESULTS.GRANTED;
+      return result === PermissionsAndroid.RESULTS.GRANTED;
     } catch {
       return false;
     }
   }
 
+  // ✅ Handle app state (pause/resume on background/foreground)
   useEffect(() => {
-    const onAppStateChange = async (next: AppStateStatus) => {
-      console.log("appState.current", appState, next);
-      if (appState.current === 'active' && next.match(/inactive|background/)) {
-        if ((recording && !paused) || !recording) {
-          await audioRecorderPlayer.pauseRecorder();
-          setIsPaused(true);
-          setPaused(true);
+    const handleAppStateChange = async (next: AppStateStatus) => {
+      if (appStatus.current === 'active' && next.match(/inactive|background/)) {
+        if (isRecording && !isPausedRec) {
+          await recorderInstance.pauseRecorder();
+          setWasPaused(true);
+          setIsPausedRec(true);
         }
-      } else
-        if (appState.current.match(/inactive|background/) && next === 'active') {
-          if (isPaused) {
-            await audioRecorderPlayer.resumeRecorder();
-            setIsPaused(false);
-          }
+      } else if (appStatus.current.match(/inactive|background/) && next === 'active') {
+        if (wasPaused) {
+          await recorderInstance.resumeRecorder();
+          setWasPaused(false);
         }
-      appState.current = next;
+      }
+      appStatus.current = next;
     };
-    const subscription = AppState.addEventListener('change', onAppStateChange);
-    return () => subscription.remove();
-  }, [isPaused]);
 
-  const onStartRecord = async () => {
-    const hasPermission = await requestAndroidPermission();
-    if (!hasPermission) {
-      Alert.alert('Permission denied', 'Cannot record without microphone permission.');
+    const sub = AppState.addEventListener('change', handleAppStateChange);
+    return () => sub.remove();
+  }, [wasPaused]);
+
+  // ✅ Start recording
+  const startRecording = async () => {
+    const permission = await askMicPermission();
+    if (!permission) {
+      Alert.alert('Permission Denied', 'Microphone access is required.');
       return;
     }
     try {
-      await audioRecorderPlayer.startRecorder();
-      setRecording(true);
-      setPaused(false);
-    } catch (error) {
-      console.error('Start recording error:', error);
+      await recorderInstance.startRecorder();
+      setIsRecording(true);
+      setIsPausedRec(false);
+    } catch (err) {
+      console.error('Error while starting:', err);
     }
   };
 
-  const onPauseRecord = async () => {
+  // ✅ Pause recording
+  const pauseRecording = async () => {
     try {
-      await audioRecorderPlayer.pauseRecorder();
-      setPaused(true);
-    } catch (error) {
-      console.error('Pause recording error:', error);
+      await recorderInstance.pauseRecorder();
+      setIsPausedRec(true);
+    } catch (err) {
+      console.error('Error while pausing:', err);
     }
   };
 
-  const onResumeRecord = async () => {
+  // ✅ Resume recording
+  const resumeRecording = async () => {
     try {
-      await audioRecorderPlayer.resumeRecorder();
-      setPaused(false);
-    } catch (error) {
-      console.error('Resume recording error:', error);
+      await recorderInstance.resumeRecorder();
+      setIsPausedRec(false);
+    } catch (err) {
+      console.error('Error while resuming:', err);
     }
   };
 
-  const onStopRecord = async () => {
+  // ✅ Stop recording
+  const stopRecording = async () => {
     try {
-      const uri = await audioRecorderPlayer.stopRecorder();
-      setRecording(false);
-      setPaused(false);
-      if (uri) {
-        setAudioList((prev) => [...prev, uri]);
+      const filePath = await recorderInstance.stopRecorder();
+      setIsRecording(false);
+      setIsPausedRec(false);
+      if (filePath) {
+        setSavedAudios((prev) => [...prev, filePath]);
       }
-    } catch (error) {
-      console.error('Stop recording error:', error);
+    } catch (err) {
+      console.error('Error while stopping:', err);
     }
   };
 
-  const playAudio = async (uri: string | undefined) => {
+  // ✅ Play audio
+  const playAudioFile = async (filePath: string | undefined) => {
     try {
-      if (playingURI === uri) {
-        await audioRecorderPlayer.stopPlayer();
-        audioRecorderPlayer.removePlayBackListener();
-        setPlayingURI(null);
+      if (currentPlaying === filePath) {
+        await recorderInstance.stopPlayer();
+        recorderInstance.removePlayBackListener();
+        setCurrentPlaying(null);
         return;
       }
-      if (playingURI) {
-        await audioRecorderPlayer.stopPlayer();
-        audioRecorderPlayer.removePlayBackListener();
+      if (currentPlaying) {
+        await recorderInstance.stopPlayer();
+        recorderInstance.removePlayBackListener();
       }
-      await audioRecorderPlayer.startPlayer(uri);
-      await audioRecorderPlayer.setVolume(1.0);
-      setPlayingURI(uri);
-      audioRecorderPlayer.addPlayBackListener((e) => {
+      await recorderInstance.startPlayer(filePath);
+      await recorderInstance.setVolume(1.0);
+      setCurrentPlaying(filePath);
+
+      recorderInstance.addPlayBackListener((e) => {
         if (e.currentPosition >= e.duration) {
-          audioRecorderPlayer.stopPlayer();
-          audioRecorderPlayer.removePlayBackListener();
-          setPlayingURI(null);
-          console.log('Playback completed');
+          recorderInstance.stopPlayer();
+          recorderInstance.removePlayBackListener();
+          setCurrentPlaying(null);
         }
       });
-      console.log('Playing audio:', uri);
-    } catch (error) {
-      console.error('Playback error:', error);
+    } catch (err) {
+      console.error('Playback error:', err);
     }
   };
 
   return (
     <View style={styles.container}>
-      <View style={{ height: StatusBar.currentHeight, backgroundColor: '#ff8533' }}>
-        <StatusBar barStyle="dark-content" />
+      <View style={{ height: StatusBar.currentHeight, backgroundColor: '#0066cc' }}>
+        <StatusBar barStyle="light-content" />
       </View>
-      <View style={{ flex: 1, padding: 20 }}>
-        <Text style={styles.statusText}>
-          Recording status: {recording ? (paused ? 'Paused' : 'Recording') : 'Idle'}
-        </Text>
-        <View style={styles.controlsContainer}>
-          {!recording && (
-            <TouchableOpacity style={styles.button} onPress={onStartRecord}>
-              <MaterialIcons name="play-arrow" size={28} color="white" />
-              <Text style={styles.buttonLabel}>Start</Text>
+
+      {/* ✅ Recorded Audios on Top */}
+      <View style={{ flex: 1, padding: 16 }}>
+        <Text style={styles.sectionTitle}>Your Recordings</Text>
+        <FlatList
+          data={savedAudios}
+          keyExtractor={(item, index) => index.toString()}
+          renderItem={({ item }) => (
+            <TouchableOpacity
+              style={[styles.listItem, currentPlaying === item && { borderColor: '#28a745' }]}
+              onPress={() => playAudioFile(item)}
+            >
+              <Ionicons
+                name={currentPlaying === item ? 'volume-high' : 'musical-notes'}
+                size={22}
+                color={currentPlaying === item ? '#28a745' : '#444'}
+              />
+              <Text
+                style={[
+                  styles.fileText,
+                  currentPlaying === item && { color: '#28a745', fontWeight: 'bold' },
+                ]}
+              >
+                {item.split('/').pop() || 'Unnamed Clip'}
+              </Text>
+              <Ionicons
+                name={currentPlaying === item ? 'pause-circle' : 'play-circle'}
+                size={28}
+                color={currentPlaying === item ? '#28a745' : '#666'}
+              />
             </TouchableOpacity>
           )}
-          {recording && !paused && (
+          ListEmptyComponent={() => (
+            <View style={{ alignItems: 'center', marginTop: 40 }}>
+              <Text style={{ color: '#777' }}>No recordings yet.</Text>
+            </View>
+          )}
+        />
+      </View>
+
+      {/* ✅ Controls at Bottom */}
+      <View style={styles.controlPanel}>
+        <Text style={styles.statusText}>
+          Status: {isRecording ? (isPausedRec ? 'Paused' : 'Recording...') : 'Idle'}
+        </Text>
+        <View style={styles.buttonRow}>
+          {!isRecording && (
+            <TouchableOpacity style={styles.controlBtn} onPress={startRecording}>
+              <MaterialIcons name="fiber-manual-record" size={28} color="white" />
+              <Text style={styles.controlLabel}>Start</Text>
+            </TouchableOpacity>
+          )}
+          {isRecording && !isPausedRec && (
             <>
-              <TouchableOpacity style={styles.button} onPress={onPauseRecord}>
+              <TouchableOpacity style={styles.controlBtn} onPress={pauseRecording}>
                 <MaterialIcons name="pause" size={28} color="white" />
-                <Text style={styles.buttonLabel}>Pause</Text>
+                <Text style={styles.controlLabel}>Pause</Text>
               </TouchableOpacity>
-              <TouchableOpacity style={styles.button} onPress={onStopRecord}>
+              <TouchableOpacity style={styles.controlBtn} onPress={stopRecording}>
                 <MaterialIcons name="stop" size={28} color="white" />
-                <Text style={styles.buttonLabel}>Stop</Text>
+                <Text style={styles.controlLabel}>Stop</Text>
               </TouchableOpacity>
             </>
           )}
-          {recording && paused && (
+          {isRecording && isPausedRec && (
             <>
-              <TouchableOpacity style={styles.button} onPress={onResumeRecord}>
+              <TouchableOpacity style={styles.controlBtn} onPress={resumeRecording}>
                 <MaterialIcons name="play-arrow" size={28} color="white" />
-                <Text style={styles.buttonLabel}>Resume</Text>
+                <Text style={styles.controlLabel}>Resume</Text>
               </TouchableOpacity>
-              <TouchableOpacity style={styles.button} onPress={onStopRecord}>
+              <TouchableOpacity style={styles.controlBtn} onPress={stopRecording}>
                 <MaterialIcons name="stop" size={28} color="white" />
-                <Text style={styles.buttonLabel}>Stop</Text>
+                <Text style={styles.controlLabel}>Stop</Text>
               </TouchableOpacity>
             </>
           )}
         </View>
-        <Text style={styles.sectionTitle}>Recorded Audios:</Text>
-
-        <FlatList
-          data={audioList}
-          keyExtractor={(item, index) => index.toString()}
-          renderItem={({ item }) => (
-            <TouchableOpacity style={styles.card} onPress={() => playAudio(item)}>
-              <MaterialIcons
-                name={item === playingURI ? 'volume-up' : 'audiotrack'}
-                size={24}
-                color={item === playingURI ? '#4caf50' : '#333'}
-              />
-              <Text style={[styles.cardText, item === playingURI && { color: '#4caf50' }]}>
-                {item?.split('/').pop() || 'Unknown File'}
-              </Text>
-              <MaterialIcons
-                name={item === playingURI ? 'pause-circle-filled' : 'play-circle-fill'}
-                size={28}
-                color={item === playingURI ? '#4caf50' : '#333'}
-              />
-            </TouchableOpacity>
-          )}
-          contentContainerStyle={{ paddingBottom: 60 }}
-          ListEmptyComponent={() => (
-            <View style={{ flex: 1, justifyContent: 'center', alignItems: 'center' }}>
-              <Text style={{ textAlign: 'center', color: '#666' }}>No recordings yet.</Text>
-            </View>
-          )}
-        />
       </View>
     </View>
   );
@@ -215,50 +234,70 @@ export default function AudioListWithPlayback() {
 
 const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: '#fff' },
-  statusText: { fontSize: 18, textAlign: 'center', marginBottom: 12 },
-  controlsContainer: {
-    flexDirection: 'row',
-    justifyContent: 'center',
-    marginBottom: 20,
-  },
-  button: {
-    backgroundColor: '#ff8533',
-    paddingVertical: 10,
-    paddingHorizontal: 18,
-    marginHorizontal: 8,
-    borderRadius: 6,
-    flexDirection: 'row',
-    alignItems: 'center',
-  },
-  buttonLabel: {
-    color: 'white',
-    fontSize: 16,
-    marginLeft: 6,
-    fontWeight: '600',
-  },
+
   sectionTitle: {
-    fontSize: 20,
-    marginBottom: 10,
+    fontSize: 22,
     fontWeight: '700',
-    color: '#333',
+    marginBottom: 12,
+    color: '#222',
   },
-  card: {
+
+  audioItem: {
     flexDirection: 'row',
     alignItems: 'center',
-    backgroundColor: '#f9f9f9',
-    borderRadius: 12,
-    padding: 15,
-    marginBottom: 12,
-    shadowColor: '#000',
-    shadowOpacity: 0.08,
-    shadowRadius: 6,
-    shadowOffset: { width: 0, height: 3 },
-    elevation: 3,
+    backgroundColor: '#eef6ff',
+    borderRadius: 10,
+    padding: 12,
+    marginBottom: 10,
   },
-  cardText: {
-    marginLeft: 12,
+  audioText: {
+    marginLeft: 10,
     fontSize: 16,
     flex: 1,
     color: '#333',
   },
+
+  controlPanel: {
+    padding: 16,
+    borderTopWidth: 1,
+    borderTopColor: '#ddd',
+    backgroundColor: '#0066cc',
+  },
+  statusText: {
+    textAlign: 'center',
+    color: 'white',
+    marginBottom: 10,
+    fontSize: 16,
+  },
+  buttonRow: {
+    flexDirection: 'row',
+    justifyContent: 'center',
+  },
+  controlBtn: {
+    backgroundColor: '#004c99',
+    paddingVertical: 10,
+    paddingHorizontal: 18,
+    marginHorizontal: 6,
+    borderRadius: 8,
+    flexDirection: 'row',
+    alignItems: 'center',
+  },
+  controlLabel: {
+    color: 'white',
+    fontSize: 15,
+    marginLeft: 6,
+    fontWeight: '600',
+  },
+  listItem: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: '#fff',
+    padding: 14,
+    marginVertical: 6,
+    borderRadius: 10,
+    borderWidth: 1,
+    borderColor: '#ddd',
+    elevation: 1,
+  },
+  fileText: { marginLeft: 10, flex: 1, fontSize: 15, color: '#444' },
 });
